@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Image Enhancer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300&family=DM+Mono:wght@300;400&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #060606;
+      --surface: #0e0e0e;
+      --border: #1e1e1e;
+      --gold: #c8a96e;
+      --gold-dim: rgba(200,169,110,0.15);
+      --gold-glow: rgba(200,169,110,0.08);
+      --text: #e8e2d9;
+      --muted: #5a5550;
+      --success: #6ecba1;
+      --error: #c86e6e;
+      --radius: 2px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 13px;
+      letter-spacing: 0.02em;
+      overflow-x: hidden;
+    }
+
+    /* --- noise overlay --- */
+    body::before {
+      content: '';
+      position: fixed;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+      background-size: 200px 200px;
+      pointer-events: none;
+      z-index: 1000;
+      opacity: 0.5;
+    }
+
+    .container {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 60px 24px 80px;
+    }
+
+    /* --- header --- */
+    header {
+      text-align: center;
+      margin-bottom: 64px;
+      animation: fadeDown 0.9s cubic-bezier(0.16,1,0.3,1) both;
+    }
+
+    .eyebrow {
+      font-size: 10px;
+      letter-spacing: 0.3em;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 16px;
+      opacity: 0.8;
+    }
+
+    h1 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: clamp(48px, 8vw, 80px);
+      font-weight: 300;
+      line-height: 0.95;
+      letter-spacing: -0.01em;
+      color: var(--text);
+    }
+
+    h1 em {
+      font-style: italic;
+      color: var(--gold);
+    }
+
+    .subtitle {
+      margin-top: 18px;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.15em;
+    }
+
+    /* --- divider line --- */
+    .line {
+      width: 1px;
+      height: 40px;
+      background: linear-gradient(to bottom, transparent, var(--gold), transparent);
+      margin: 0 auto 48px;
+      opacity: 0.4;
+      animation: fadeDown 1s 0.2s cubic-bezier(0.16,1,0.3,1) both;
+    }
+
+    /* --- main card --- */
+    .card {
+      width: 100%;
+      max-width: 760px;
+      animation: fadeUp 1s 0.15s cubic-bezier(0.16,1,0.3,1) both;
+    }
+
+    /* --- upload zone --- */
+    .upload-zone {
+      position: relative;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 64px 40px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.3s, background 0.3s;
+      background: var(--surface);
+      overflow: hidden;
+    }
+
+    .upload-zone::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 60% 50% at 50% 50%, var(--gold-glow), transparent);
+      opacity: 0;
+      transition: opacity 0.4s;
+      pointer-events: none;
+    }
+
+    .upload-zone:hover::before,
+    .upload-zone.drag-over::before { opacity: 1; }
+
+    .upload-zone:hover,
+    .upload-zone.drag-over {
+      border-color: rgba(200,169,110,0.4);
+    }
+
+    .upload-zone.drag-over {
+      border-color: var(--gold);
+      border-style: dashed;
+    }
+
+    .upload-icon {
+      width: 48px;
+      height: 48px;
+      margin: 0 auto 20px;
+      opacity: 0.35;
+    }
+
+    .upload-title {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 22px;
+      font-weight: 300;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .upload-hint {
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+    }
+
+    .upload-hint span {
+      color: var(--gold);
+      opacity: 0.7;
+    }
+
+    #fileInput { display: none; }
+
+    /* --- options row --- */
+    .options-row {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+      align-items: center;
+    }
+
+    .opt-label {
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      white-space: nowrap;
+    }
+
+    select {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 12px;
+      padding: 10px 14px;
+      cursor: pointer;
+      outline: none;
+      appearance: none;
+      -webkit-appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%235a5550' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+      transition: border-color 0.2s;
+    }
+
+    select:focus { border-color: rgba(200,169,110,0.4); }
+
+    select option { background: #121212; }
+
+    /* --- preview area --- */
+    .preview-wrap {
+      display: none;
+      margin-top: 24px;
+      gap: 12px;
+    }
+
+    .preview-wrap.visible { display: grid; grid-template-columns: 1fr 1fr; }
+
+    .preview-panel {
+      position: relative;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+      background: var(--surface);
+      aspect-ratio: 4/3;
+    }
+
+    .preview-panel img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+
+    .panel-badge {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      font-size: 9px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+      background: rgba(6,6,6,0.85);
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      backdrop-filter: blur(4px);
+    }
+
+    .panel-badge.after { color: var(--gold); border-color: rgba(200,169,110,0.25); }
+
+    .panel-info {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      font-size: 9px;
+      letter-spacing: 0.15em;
+      color: var(--muted);
+      background: rgba(6,6,6,0.85);
+      padding: 4px 8px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      backdrop-filter: blur(4px);
+    }
+
+    .panel-info.after { color: var(--gold); border-color: rgba(200,169,110,0.25); }
+
+    .btn-view {
+      background: rgba(200,169,110,0.06);
+      border-color: rgba(200,169,110,0.2);
+      color: var(--muted);
+      font-size: 10px;
+    }
+
+    .btn-view:hover {
+      border-color: rgba(200,169,110,0.4);
+      color: var(--gold);
+    }
+
+    /* --- shimmer loading state --- */
+    .shimmer {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(
+        110deg,
+        var(--surface) 30%,
+        rgba(200,169,110,0.06) 50%,
+        var(--surface) 70%
+      );
+      background-size: 200% 100%;
+      animation: shimmer 1.6s infinite linear;
+    }
+
+    /* --- status bar --- */
+    .status-bar {
+      display: none;
+      margin-top: 16px;
+      padding: 14px 18px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      align-items: center;
+      gap: 12px;
+    }
+
+    .status-bar.visible { display: flex; }
+
+    .spinner {
+      width: 16px;
+      height: 16px;
+      border: 1.5px solid var(--border);
+      border-top-color: var(--gold);
+      border-radius: 50%;
+      flex-shrink: 0;
+      animation: spin 0.9s linear infinite;
+    }
+
+    .status-text {
+      flex: 1;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+    }
+
+    .status-text b { color: var(--text); font-weight: 400; }
+
+    .progress-track {
+      width: 80px;
+      height: 2px;
+      background: var(--border);
+      border-radius: 1px;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .progress-fill {
+      height: 100%;
+      background: var(--gold);
+      border-radius: 1px;
+      width: 0%;
+      transition: width 0.6s ease;
+    }
+
+    /* --- action buttons --- */
+    .actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 20px;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 14px 24px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--text);
+      font-family: 'DM Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      cursor: pointer;
+      transition: all 0.25s;
+      text-align: center;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .btn:disabled {
+      opacity: 0.3;
+      cursor: not-allowed;
+      pointer-events: none;
+    }
+
+    .btn-primary {
+      background: var(--gold-dim);
+      border-color: rgba(200,169,110,0.4);
+      color: var(--gold);
+    }
+
+    .btn-primary:hover {
+      background: rgba(200,169,110,0.25);
+      border-color: var(--gold);
+      box-shadow: 0 0 24px rgba(200,169,110,0.1);
+    }
+
+    .btn-secondary:hover {
+      border-color: rgba(200,169,110,0.25);
+      color: var(--gold);
+    }
+
+    .btn-download {
+      background: rgba(110,203,161,0.1);
+      border-color: rgba(110,203,161,0.3);
+      color: var(--success);
+    }
+
+    .btn-download:hover {
+      background: rgba(110,203,161,0.18);
+      border-color: var(--success);
+    }
+
+    /* --- notification toast --- */
+    .toast {
+      position: fixed;
+      bottom: 32px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 20px;
+      font-size: 11px;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      opacity: 0;
+      transition: all 0.35s cubic-bezier(0.16,1,0.3,1);
+      white-space: nowrap;
+      pointer-events: none;
+      z-index: 999;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .toast.error { border-color: rgba(200,110,110,0.4); color: var(--error); }
+    .toast.success { border-color: rgba(110,203,161,0.4); color: var(--success); }
+
+    /* --- footer --- */
+    footer {
+      margin-top: 64px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: 0.2em;
+      opacity: 0.5;
+      animation: fadeUp 1.2s 0.4s both;
+    }
+
+    /* --- keyframes --- */
+    @keyframes fadeDown {
+      from { opacity: 0; transform: translateY(-16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(16px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+    @keyframes shimmer {
+      from { background-position: 200% 0; }
+      to   { background-position: -200% 0; }
+    }
+
+    /* --- responsive --- */
+    @media (max-width: 540px) {
+      .preview-wrap.visible { grid-template-columns: 1fr; }
+      h1 { font-size: 44px; }
+      .upload-zone { padding: 48px 24px; }
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <p class="eyebrow">AI · Image Enhancement</p>
+    <h1>Make It<br /><em>Sharper</em></h1>
+    <p class="subtitle">powered by WaveSpeed Ultimate Upscaler</p>
+  </header>
+
+  <div class="line"></div>
+
+  <div class="card">
+
+    <!-- upload zone -->
+    <div class="upload-zone" id="uploadZone">
+      <svg class="upload-icon" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <rect x="4" y="8" width="40" height="32" rx="2" stroke="#c8a96e" stroke-width="1.5"/>
+        <circle cx="16" cy="20" r="4" stroke="#c8a96e" stroke-width="1.5"/>
+        <path d="M4 34l10-10 8 8 6-6 16 14" stroke="#c8a96e" stroke-width="1.5" stroke-linejoin="round"/>
+        <path d="M34 4v12M28 10l6-6 6 6" stroke="#c8a96e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+      <p class="upload-title">Drop your image here</p>
+      <p class="upload-hint">or <span>click to browse</span> &nbsp;·&nbsp; JPG · PNG · WEBP</p>
+      <input type="file" id="fileInput" accept="image/jpeg,image/png,image/webp,image/gif,image/bmp" />
+    </div>
+
+    <!-- options -->
+    <div class="options-row">
+      <span class="opt-label">Resolution</span>
+      <select id="targetRes">
+        <option value="2k">2K — Fast, balanced</option>
+        <option value="4k" selected>4K — Recommended</option>
+        <option value="8k">8K — Ultra detail</option>
+      </select>
+      <span class="opt-label">Format</span>
+      <select id="outputFmt">
+        <option value="png">PNG</option>
+        <option value="jpeg" selected>JPEG</option>
+        <option value="webp">WEBP</option>
+      </select>
+    </div>
+
+    <!-- before / after preview -->
+    <div class="preview-wrap" id="previewWrap">
+      <div class="preview-panel">
+        <img id="previewBefore" src="" alt="Original" />
+        <span class="panel-badge">Before</span>
+        <span class="panel-info" id="infoBefore"></span>
+      </div>
+      <div class="preview-panel" id="afterPanel">
+        <img id="previewAfter" src="" alt="Enhanced" style="display:none" />
+        <div class="shimmer" id="shimmerEl"></div>
+        <span class="panel-badge after">After</span>
+        <span class="panel-info after" id="infoAfter"></span>
+      </div>
+    </div>
+
+    <!-- status bar -->
+    <div class="status-bar" id="statusBar">
+      <div class="spinner" id="statusSpinner"></div>
+      <span class="status-text" id="statusText">Preparing…</span>
+      <div class="progress-track">
+        <div class="progress-fill" id="progressFill"></div>
+      </div>
+    </div>
+
+    <!-- action buttons -->
+    <div class="actions">
+      <button class="btn btn-primary" id="enhanceBtn" disabled>
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+          <path d="M7 1v12M1 7h12M3 3l8 8M11 3L3 11" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+        Enhance
+      </button>
+      <button class="btn btn-secondary" id="resetBtn">
+        Reset
+      </button>
+      <a class="btn btn-view" id="viewBtn" target="_blank" style="display:none">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+          <path d="M5 2H2a1 1 0 00-1 1v8a1 1 0 001 1h8a1 1 0 001-1V8M8 1h4m0 0v4m0-4L5.5 7.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Full Size
+      </a>
+      <a class="btn btn-download" id="downloadBtn" style="display:none" download="enhanced.jpg">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+          <path d="M6.5 1v8M3 6l3.5 3.5L10 6M1 12h11" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        Download
+      </a>
+    </div>
+
+  </div>
+
+  <footer>IMAGE ENHANCER &nbsp;·&nbsp; WAVESPEED AI &nbsp;·&nbsp; 4K / 8K UPSCALING</footer>
+
+</div>
+
+<!-- toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+  const API_KEY = '16e0c3b3b9575f39e12e8b164083ec887ece45f05d3558c315c8dcc7517133d5';
+  const BASE_URL = 'https://api.wavespeed.ai/api/v3';
+
+  const uploadZone  = document.getElementById('uploadZone');
+  const fileInput   = document.getElementById('fileInput');
+  const enhanceBtn  = document.getElementById('enhanceBtn');
+  const resetBtn    = document.getElementById('resetBtn');
+  const downloadBtn = document.getElementById('downloadBtn');
+  const viewBtn     = document.getElementById('viewBtn');
+  const infoBefore  = document.getElementById('infoBefore');
+  const infoAfter   = document.getElementById('infoAfter');
+  const previewWrap = document.getElementById('previewWrap');
+  const previewBefore = document.getElementById('previewBefore');
+  const previewAfter  = document.getElementById('previewAfter');
+  const shimmerEl   = document.getElementById('shimmerEl');
+  const statusBar   = document.getElementById('statusBar');
+  const statusText  = document.getElementById('statusText');
+  const statusSpinner = document.getElementById('statusSpinner');
+  const progressFill  = document.getElementById('progressFill');
+  const toast       = document.getElementById('toast');
+  const targetRes   = document.getElementById('targetRes');
+  const outputFmt   = document.getElementById('outputFmt');
+
+  let selectedFile  = null;
+  let processing    = false;
+
+  // --- upload zone interactions ---
+  uploadZone.addEventListener('click', () => fileInput.click());
+
+  uploadZone.addEventListener('dragover', e => {
+    e.preventDefault();
+    uploadZone.classList.add('drag-over');
+  });
+
+  uploadZone.addEventListener('dragleave', () => uploadZone.classList.remove('drag-over'));
+
+  uploadZone.addEventListener('drop', e => {
+    e.preventDefault();
+    uploadZone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (file) handleFile(file);
+  });
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) handleFile(fileInput.files[0]);
+  });
+
+  function handleFile(file) {
+    if (!file.type.startsWith('image/')) {
+      showToast('Please select an image file.', 'error');
+      return;
+    }
+    selectedFile = file;
+    const url = URL.createObjectURL(file);
+    previewBefore.onload = () => {
+      infoBefore.textContent = `${previewBefore.naturalWidth} × ${previewBefore.naturalHeight}`;
+    };
+    previewBefore.src = url;
+    previewAfter.src = '';
+    previewAfter.style.display = 'none';
+    infoAfter.textContent = '';
+    shimmerEl.style.display = 'block';
+    previewWrap.classList.add('visible');
+    statusBar.classList.remove('visible');
+    downloadBtn.style.display = 'none';
+    viewBtn.style.display = 'none';
+    enhanceBtn.disabled = false;
+    setProgress(0);
+  }
+
+  resetBtn.addEventListener('click', () => {
+    selectedFile = null;
+    fileInput.value = '';
+    previewBefore.src = '';
+    previewAfter.src = '';
+    previewAfter.style.display = 'none';
+    shimmerEl.style.display = 'block';
+    previewWrap.classList.remove('visible');
+    statusBar.classList.remove('visible');
+    downloadBtn.style.display = 'none';
+    enhanceBtn.disabled = true;
+    setProgress(0);
+    processing = false;
+  });
+
+  enhanceBtn.addEventListener('click', async () => {
+    if (!selectedFile || processing) return;
+    processing = true;
+    enhanceBtn.disabled = true;
+    previewAfter.style.display = 'none';
+    shimmerEl.style.display = 'block';
+    downloadBtn.style.display = 'none';
+
+    try {
+      // Step 1: upload file
+      setStatus('Uploading image…', 10);
+      const imageUrl = await uploadImage(selectedFile);
+
+      // Step 2: submit enhancement task
+      setStatus('Submitting enhancement task…', 30);
+      const taskId = await submitTask(imageUrl);
+
+      // Step 3: poll for result
+      setStatus('Enhancing — this may take a moment…', 50);
+      const outputUrl = await pollResult(taskId);
+
+      // Step 4: done
+      setProgress(100);
+      setStatus('Complete', 100);
+      statusSpinner.style.display = 'none';
+
+      previewAfter.onload = () => {
+        shimmerEl.style.display = 'none';
+        previewAfter.style.display = 'block';
+        infoAfter.textContent = `${previewAfter.naturalWidth} × ${previewAfter.naturalHeight}`;
+        downloadBtn.href = outputUrl;
+        downloadBtn.download = `enhanced.${outputFmt.value === 'jpeg' ? 'jpg' : outputFmt.value}`;
+        downloadBtn.style.display = 'inline-flex';
+        viewBtn.href = outputUrl;
+        viewBtn.style.display = 'inline-flex';
+        showToast('Enhancement complete!', 'success');
+      };
+      previewAfter.src = outputUrl;
+
+    } catch (err) {
+      statusSpinner.style.display = 'none';
+      setStatus(`Error: ${err.message}`, 0);
+      showToast(err.message, 'error');
+    } finally {
+      processing = false;
+      enhanceBtn.disabled = false;
+    }
+  });
+
+  async function safeJson(res, label) {
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch (e) {
+      console.error(`[${label}] raw response:`, text);
+      throw new Error(`${label} returned invalid response (HTTP ${res.status}): ${text.slice(0, 120)}`);
+    }
+  }
+
+  async function uploadImage(file) {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch(`${BASE_URL}/media/upload/binary`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${API_KEY}` },
+      body: form
+    });
+    const json = await safeJson(res, 'Upload');
+    if (json.code !== 200) throw new Error(`Upload failed: ${json.message}`);
+    return json.data.download_url;
+  }
+
+  async function submitTask(imageUrl) {
+    const res = await fetch(`${BASE_URL}/wavespeed-ai/ultimate-image-upscaler`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${API_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        image: imageUrl,
+        target_resolution: targetRes.value,
+        output_format: outputFmt.value
+      })
+    });
+    const json = await safeJson(res, 'Submit');
+    if (json.code !== 200) throw new Error(`Submit failed: ${json.message}`);
+    return json.data.urls.get;
+  }
+
+  async function pollResult(pollUrl) {
+    const maxAttempts = 60;
+    let attempts = 0;
+
+    while (attempts < maxAttempts) {
+      await sleep(2500);
+      attempts++;
+
+      const res = await fetch(pollUrl, {
+        headers: { 'Authorization': `Bearer ${API_KEY}` }
+      });
+      const json = await safeJson(res, 'Poll');
+
+      if (json.code !== 200) throw new Error(`Poll failed: ${json.message}`);
+
+      const { status, outputs } = json.data;
+      const pct = Math.min(50 + Math.round((attempts / maxAttempts) * 48), 98);
+      setProgress(pct);
+
+      if (status === 'completed') {
+        if (!outputs || outputs.length === 0) throw new Error('No output returned');
+        return outputs[0];
+      }
+
+      if (status === 'failed') throw new Error('Enhancement task failed on server');
+    }
+
+    throw new Error('Timed out waiting for result');
+  }
+
+  // --- helpers ---
+  function setStatus(msg, pct) {
+    statusBar.classList.add('visible');
+    statusSpinner.style.display = '';
+    statusText.innerHTML = msg;
+    setProgress(pct);
+  }
+
+  function setProgress(pct) {
+    progressFill.style.width = `${pct}%`;
+  }
+
+  let toastTimer;
+  function showToast(msg, type = '') {
+    clearTimeout(toastTimer);
+    toast.textContent = msg;
+    toast.className = `toast ${type} show`;
+    toastTimer = setTimeout(() => toast.classList.remove('show'), 3500);
+  }
+
+  function sleep(ms) {
+    return new Promise(r => setTimeout(r, ms));
+  }
+</script>
+</body>
+</html>
